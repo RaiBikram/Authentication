@@ -86,7 +86,7 @@ export const verifyEmailUserController = async (
 ) => {
   try {
     const { code } = req.body;
-    console.log(code);
+    // console.log(code);
     if (!code) {
       res.status(400).json({
         success: false,
@@ -101,7 +101,7 @@ export const verifyEmailUserController = async (
         verificationTokenExpiresAt: MoreThan(new Date()),
       },
     });
-    console.log(user);
+    // console.log(user);
     if (!user) {
       res.status(401).json({
         success: false,
