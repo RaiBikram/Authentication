@@ -56,10 +56,9 @@ export class User {
 
   @Column({
     type: "varchar",
-    length: 255,
     nullable: true,
   })
-  resetPasswordToken?: number | null;
+  resetPasswordToken?: string | null;
 
   @Column({
     type: "timestamp",
@@ -69,10 +68,9 @@ export class User {
 
   @Column({
     type: "varchar",
-    length: 6,
     nullable: true,
   })
-  verificationToken?: number | null;
+  verificationToken?: string | null;
 
   @Column({
     type: "timestamp",

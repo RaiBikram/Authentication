@@ -10,13 +10,15 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(cookieParser()); // Allows reading cookies
-app.use("/api/user", userRouter);
 app.use(
   cors({
-    origin: "*",
-    credentials: true, // Allow sending cookies
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    credentials: true, // Allow cookies and credentials
   })
 );
+app.use("/api/user", userRouter);
+
 app.get("/", (req, res) => {
   res.send("Hello, TypeScript with Node.js!");
 });

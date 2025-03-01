@@ -6,7 +6,7 @@ import jwt from "jsonwebtoken";
 import { cookiesOptions } from "../utils/coookiesOptions";
 import { MoreThan } from "typeorm";
 import { cloudinary } from "../config/cloudnaryConfig";
-import crypto from "crypto"
+import crypto from "crypto";
 import fs from "fs";
 import {
   sendPasswordResetEmail,
@@ -48,10 +48,10 @@ export const registerUserController = async (
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 6 digit
-    const verificationToken = Math.floor(100000 + Math.random() * 900000);
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    // const verificationToken = Math.floor(100000 + Math.random() * 900000);
 
-    const newUser:User = userRepository.create({
+    const newUser: User = userRepository.create({
       email: email.trim().toLowerCase(),
       password: hashedPassword,
       name,
@@ -62,12 +62,14 @@ export const registerUserController = async (
     });
 
     await userRepository.save(newUser);
-    sendVerificationEmail(newUser.email, verificationToken);
+    sendVerificationEmail(newUser.name, newUser.email, verificationToken);
     res.status(201).json({
       success: true,
       message: "User registered successfully",
       verificationToken: verificationToken, // TODO user email
     });
+
+    return;
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -109,9 +111,11 @@ export const verifyEmailUserController = async (
       });
       return;
     }
+
     user.isVerified = true;
     user.verificationToken = null;
     user.verificationTokenExpiresAt = null;
+
     await getRepository.save(user);
     sendWelcomeEmail(user.email, user.name);
     res.status(200).json({
@@ -144,6 +148,7 @@ export const loginUserController = async (
         success: false,
         message: "Required all fields",
       });
+      return;
     }
     const userRepository = AppDataSource.getRepository(User);
     const user = await userRepository.findOne({
@@ -154,6 +159,7 @@ export const loginUserController = async (
         success: false,
         message: "User not found",
       });
+      return;
     }
     const isPasswordValid = await bcrypt.compare(
       password,
@@ -163,11 +169,24 @@ export const loginUserController = async (
       res.status(401).json({
         message: "Invalid credentials. Please try again.",
       });
+      return;
     }
-
+    // console.log("user",user)
     const token = jwt.sign({ userId: user?.id }, process.env.JWT_SECRET!, {
       expiresIn: "1d",
     });
+    // console.log("token", token)
+    res.clearCookie("__next_hmr_refresh_hash__", { path: "/" });
+    // ✅ Remove previous token before setting a new one
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      expires: new Date(0), // Forces cookie deletion
+    });
+
+    //send cookes
     res.status(200).cookie("token", token, cookiesOptions).json({
       success: true,
       message: "Successfully logged in",
@@ -175,12 +194,14 @@ export const loginUserController = async (
       email: user?.email,
       role: user?.role,
     });
+    return;
   } catch (error) {
     res.status(500).json({
       success: false,
       message: "Error while trying to login:",
       error: error instanceof Error ? error.message : "Unknown error",
     });
+    return;
   }
 };
 //@get user profile
@@ -234,10 +255,19 @@ export const logoutUserController = async (
   res: Response
 ): Promise<void> => {
   try {
-    res.status(200).clearCookie("token", cookiesOptions).json({
-      success: true,
-      message: "Successfully logged out",
-    });
+    res
+      .clearCookie("token", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/", // Ensure it matches the original path
+        expires: new Date(0), // Forces the browser to delete the cookie
+      })
+      .json({
+        success: true,
+        message: "Successfully logged out",
+      });
+    return;
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -248,18 +278,16 @@ export const logoutUserController = async (
 //@forgot password
 //@verified user
 //@/api/user/forgot
-export const forgotPasswordController = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
+export const forgotPasswordController = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
 
     if (!email) {
       res.status(400).json({
         success: false,
-        message: "Missing user credentials.",
+        message: "Missing email.",
       });
+      return;
     }
 
     const userRepository = AppDataSource.getRepository(User);
@@ -274,27 +302,30 @@ export const forgotPasswordController = async (
       });
       return;
     }
-    // const resetToken = crypto.randomBytes(20).toString("hex"); // TODO share link
-    // Generate reset token (6-digit OTP)
-    const resetToken = Math.floor(100000 + Math.random() * 900000);
-    user!.resetPasswordToken = resetToken;
-    user!.resetPasswordExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-    await userRepository.save(user!);
-    sendPasswordResetEmail(user.email, resetToken);
+    // Generate secure reset token
+    const resetToken = crypto.randomBytes(32).toString("hex"); // Stronger token
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // Expires in 1 hour
+
+    await userRepository.save(user);
+
+    // Send email
+    sendPasswordResetEmail(user.name, user.email, resetToken);
+
     res.status(200).json({
       success: true,
-      message: "Reset token generated successfully.",
-      email: user?.email,
-      resetToken,
+      message: "Password reset instructions sent to your email.",
     });
   } catch (error) {
+    console.error("Forgot Password Error:", error);
     res.status(500).json({
       success: false,
-      message: error instanceof Error ? error.message : "Internal Server Error",
+      message: "Internal Server Error",
     });
   }
 };
+
 
 //@reset password
 //@verified and non
@@ -310,12 +341,14 @@ export const resetUserPasswordController = async (
         success: false,
         message: "Reset Token missing",
       });
+      return;
     }
     if (!password) {
       res.status(400).json({
         success: false,
         message: "Password missing",
       });
+      return;
     }
 
     const userRepository = AppDataSource.getRepository(User);
@@ -349,6 +382,7 @@ export const resetUserPasswordController = async (
       success: true,
       message: "New password set successfully",
     });
+    return;
   } catch (error) {
     res.status(500).json({
       success: false,

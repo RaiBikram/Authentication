@@ -9,20 +9,12 @@ export const authGuard = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.cookie || req.headers.authorization;
+    const authHeader = req.headers.authorization;
+    const cookieToken = req.cookies?.token;
 
-    if (!authHeader) {
-      res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
-      return;
-    }
-
-    // Extract token from cookie or authorization header
-    const token = authHeader.includes("Bearer")
-      ? authHeader.split(" ")[1]
-      : authHeader.split("=")[1];
+    const token =
+      cookieToken ||
+      (authHeader?.startsWith("Bearer ") ? authHeader.split(" ")[1] : null);
 
     if (!token) {
       res.status(401).json({
@@ -105,16 +97,15 @@ export const isNormal = async (
   }
 };
 
-
-export const isVerified = async(
-  req:Request,
-  res:Response,
-  next:NextFunction
-):Promise<void>=>{
+export const isVerified = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
-    if(req.user?.isVerified){
+    if (req.user?.isVerified) {
       return next();
-    }else{
+    } else {
       res.status(400).json({
         success: false,
         message: "User Not verified.",
@@ -126,4 +117,4 @@ export const isVerified = async(
       message: error instanceof Error ? error.message : "Error in isVerified",
     });
   }
-}
+};
